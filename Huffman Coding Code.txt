@@ -1,0 +1,160 @@
+import heapq
+import os
+
+class binarytreenode:
+    def __init__(self, value, freq):
+        self.value = value
+        self.freq = freq
+        self.left = None
+        self.right = None
+    
+    def __lt__(self, other):  #for comparing in min heap without confusion - lesser than
+        return self.freq<other.freq
+    
+    def __eq__(self, other):  #for comparing in min heap without confusion  - equal to
+        return self.freq==other.freq
+        
+class huffmancoding:
+    def __init__(self, path):
+        self.path = path
+        self.__heap = []
+        self.__codes = {}
+        self.__reversecodes = {}
+        
+    def __make_freq_dict(self,text):
+        freq_dict = {}
+        for char in text:
+            if char not in freq_dict:
+                freq_dict[char] = 0
+            else:
+                freq_dict[char]+=1
+        return freq_dict
+    
+    def __buildheap(self, freq_dict):
+        for key in freq_dict:
+            frequency = freq_dict[key]
+            binary_tree_node = binarytreenode(key, frequency)
+            heapq.heappush(self.__heap, binary_tree_node)
+    
+    def __buildtree(self):
+        while (len(self.__heap)>1):
+            binary_tree_node_1 = heapq.heappop(self.__heap)
+            binary_tree_node_2 = heapq.heappop(self.__heap)
+            freq_sum = binary_tree_node_1.freq + binary_tree_node_2.freq
+            newnode = binarytreenode(None, freq_sum)
+            newnode.left = binary_tree_node_1
+            newnode.right = binary_tree_node_2
+            heapq.heappush(self.__heap, newnode)
+        return
+    
+    def __buildcodeshelper(self, root, curr_bits):
+        if root is None:
+            return
+        if root.value is not None:
+            self.__codes[root.value] = curr_bits
+            self.__reversecodes[curr_bits] = root.value
+            return
+        self.__buildcodeshelper(root.left, curr_bits+"0")
+        self.__buildcodeshelper(root.right, curr_bits+"1")
+        
+    def __buildcodes(self):
+        root = heapq.heappop(self.__heap)
+        self.__buildcodeshelper(root, "")
+    
+    def __getencodedtext(self, text):
+        encoded_text = ""
+        for char in text:
+            encoded_text+=self.__codes[char]
+        return encoded_text
+    
+    def __getpaddedencodedtext(self,encoded_text):
+        padded_amount = 8-(len(encoded_text)%8)
+        for i in range(padded_amount):
+            encoded_text+='0' #to make equal 8 bits
+        padded_info = "{0:08b}".format(padded_amount) #how much we added
+        padded_encoded_text = padded_info + encoded_text
+        return padded_encoded_text
+    
+    def __getbytesarray(self, padded_encoded_text):
+        array = []
+        for i in range(0, len(padded_encoded_text),8):
+            byte = padded_encoded_text[i:i+8]
+            array.append(int(byte, 2))
+        return array
+    
+    def compress(self):
+        #get file from path
+        #read the text from file
+        file_name, file_extension = os.path.splitext(self.path)
+        output_path = file_name + ".bin"
+        with open(self.path, 'r+')as file, open(output_path, 'wb') as output:
+            text = file.read()
+            text = text.rstrip()
+            
+            #to make frequency dictionary using the text
+            freq_dict = self.__make_freq_dict(text)
+
+            #to construct heap from the freq_dict
+            self.__buildheap(freq_dict)
+
+            #to construct binary tree from the heap
+            self.__buildtree()
+
+            #to construct the codes from binary tree
+            self.__buildcodes()
+
+            #to create encoded text using codes
+            encoded_text = self.__getencodedtext(text)
+
+            #pad the encoded text
+            padded_encoded_text = self.__getpaddedencodedtext(encoded_text)
+
+            #convert to bytes
+            bytes_array = self.__getbytesarray(padded_encoded_text)
+
+            #convert using inbuilt bytes function
+            final_bytes = bytes(bytes_array)
+
+            #return the binary file as output
+            output.write(final_bytes)
+        print("Compressed")
+        return output_path
+    
+    def __removepadding(self, text):
+        padded_info = text[:8]
+        extra_padding = int(padded_info, 2)
+        text = text[8:]
+        text_after_padding_removed = text[:-1*extra_padding] #remove 0 at last which we appended
+        return text_after_padding_removed
+    
+    def __decodetext(self, text):
+        decoded_text = ''
+        current_bit = ''
+        for bit in text:
+            current_bit+=bit
+            if current_bit in self.__reversecodes:
+                character = self.__reversecodes[current_bit]
+                decoded_text += character
+                current_bit = ''
+        return decoded_text
+    
+    def decompress(self, input_path):
+        filename, file_extension = os.path.splitext(self.path)
+        output_path = filename+"_decompressed"+".txt"
+        with open(input_path,"rb") as file, open(output_path,"w") as output:
+            bit_string = ''
+            byte = file.read(1)
+            while byte:
+                byte = ord(byte)
+                bits = bin(byte)[2:].rjust(8,'0')
+                bit_string += bits
+                byte = file.read(1)
+            actual_text = self.__removepadding(bit_string)
+            decompressed_text = self.__decodetext(actual_text)
+            output.write(decompressed_text)
+        return
+    
+path = 'C:/Users/saipa/Downloads/sample (2).txt'
+h = huffmancoding(path)
+output_path = h.compress()
+h.decompress(output_path)
